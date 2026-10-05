@@ -1,6 +1,6 @@
 # Custom VLC patches
 
-This repository contains a source patch for **VLC 3.0.24 on macOS**. It does
+This repository contains source patches for **VLC 3.0.24 on macOS**. It does
 not contain a VLC checkout, media files, dependencies, or a prebuilt
 application bundle.
 
@@ -19,6 +19,19 @@ If the move to Trash fails, VLC shows the macOS error and leaves playback and
 the playlist unchanged. It never deletes network streams or files that are not
 the current local media item.
 
+## Fullscreen file size
+
+`patches/vlc-3.0.24-fullscreen-file-size.patch` appends the current local
+file's human-readable size to the fullscreen title, for example:
+
+```
+My Film.mkv (1.4 GB)
+```
+
+It reuses VLC's compatibility-aware byte formatter, respects the system
+locale, and leaves stream titles unchanged. The patch requires the fullscreen
+Trash patch above, so use the helper script to apply both in order.
+
 ## Apply the patch
 
 Download and unpack the official VLC **3.0.24** source release, then run:
@@ -33,7 +46,7 @@ the source tree:
 
 ```sh
 cd /absolute/path/to/vlc-3.0.24
-patch --dry-run -p1 < /absolute/path/to/custom-vlc/patches/vlc-3.0.24-fullscreen-trash.patch
+/absolute/path/to/custom-vlc/scripts/apply-vlc-3.0.24-patch.sh "$(pwd)"
 ```
 
 ## Build on Apple Silicon

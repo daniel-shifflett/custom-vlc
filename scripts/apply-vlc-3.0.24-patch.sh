@@ -13,8 +13,14 @@ if [ ! -f "$source_dir/modules/gui/macosx/VLCFSPanelController.m" ]; then
 fi
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-patch_file=$script_dir/../patches/vlc-3.0.24-fullscreen-trash.patch
+trash_patch_file=$script_dir/../patches/vlc-3.0.24-fullscreen-trash.patch
+file_size_patch_file=$script_dir/../patches/vlc-3.0.24-fullscreen-file-size.patch
 
 cd "$source_dir"
-patch --dry-run -p1 < "$patch_file"
-patch -p1 < "$patch_file"
+for patch_file in "$trash_patch_file" "$file_size_patch_file"; do
+    patch --dry-run -p1 < "$patch_file"
+done
+
+for patch_file in "$trash_patch_file" "$file_size_patch_file"; do
+    patch -p1 < "$patch_file"
+done

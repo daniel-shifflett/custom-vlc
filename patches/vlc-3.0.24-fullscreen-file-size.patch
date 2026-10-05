@@ -1,0 +1,32 @@
+--- a/modules/gui/macosx/VLCFSPanelController.m
++++ b/modules/gui/macosx/VLCFSPanelController.m
+@@ -27,6 +27,7 @@
+ #import "VLCFSPanelController.h"
+ #import "VLCCoreInteraction.h"
+ #import "CompatibilityFixes.h"
++#import "misc.h"
+ #import "VLCMain.h"
+ 
+ @interface VLCFSPanelController () {
+@@ -305,7 +306,20 @@
+ 
+ - (void)setStreamTitle:(NSString *)title
+ {
+-    [_mediaTitle setStringValue:title];
++    NSString *displayTitle = title;
++    NSURL *mediaURL = [[VLCCoreInteraction sharedInstance] URLOfCurrentPlaylistItem];
++    if (mediaURL.isFileURL) {
++        NSDictionary *attributes = [[NSFileManager defaultManager] attributesOfItemAtPath:mediaURL.path
++                                                                                      error:nil];
++        NSNumber *fileSize = [attributes objectForKey:NSFileSize];
++        if (fileSize) {
++            NSString *formattedFileSize = [VLCByteCountFormatter stringFromByteCount:fileSize.longLongValue
++                                                                            countStyle:NSByteCountFormatterCountStyleFile];
++            displayTitle = [NSString stringWithFormat:@"%@ (%@)", title, formattedFileSize];
++        }
++    }
++
++    [_mediaTitle setStringValue:displayTitle];
+ }
+ 
+ - (void)updatePositionAndTime
