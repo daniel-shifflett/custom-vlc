@@ -1,0 +1,209 @@
+--- a/modules/gui/macosx/VLCFSPanelController.h
++++ b/modules/gui/macosx/VLCFSPanelController.h
+@@ -41,6 +41,7 @@
+ @property IBOutlet NSButton     *nextButton;
+ @property IBOutlet NSButton     *previousButton;
+ @property IBOutlet NSButton     *fullscreenButton;
++@property IBOutlet NSButton     *trashButton;
+ @property IBOutlet NSTextField  *mediaTitle;
+ @property IBOutlet VLCTimeField *elapsedTime;
+ @property IBOutlet VLCTimeField *remainingOrTotalTime;
+@@ -55,6 +56,7 @@
+ - (IBAction)gotoPrevious:(id)sender;
+ - (IBAction)gotoNext:(id)sender;
+ - (IBAction)toggleFullscreen:(id)sender;
++- (IBAction)trashCurrentFile:(id)sender;
+ - (IBAction)timeSliderUpdate:(id)sender;
+ - (IBAction)volumeSliderUpdate:(id)sender;
+ 
+--- a/modules/gui/macosx/VLCFSPanelController.m
++++ b/modules/gui/macosx/VLCFSPanelController.m
+@@ -136,6 +136,9 @@
+     setupButton(_fullscreenButton,
+                 _NS("Leave fullscreen"),
+                 _NS("Leave fullscreen"));
++    setupButton(_trashButton,
++                _NS("Move to Trash"),
++                _NS("Move the current file to the Trash"));
+     setupButton(_volumeSlider,
+                 _NS("Volume"),
+                 _NS("Adjust the volume"));
+@@ -153,6 +156,7 @@
+      * so the state is shared between those.
+      */
+     [_remainingOrTotalTime setRemainingIdentifier:@"DisplayTimeAsTimeRemaining"];
++    [self updateTrashButton];
+ }
+ 
+ #undef setupButton
+@@ -200,6 +204,54 @@
+     [[VLCCoreInteraction sharedInstance] toggleFullscreen];
+ }
+ 
++- (IBAction)trashCurrentFile:(id)sender
++{
++    NSURL *mediaURL = [[VLCCoreInteraction sharedInstance] URLOfCurrentPlaylistItem];
++    if (!mediaURL.isFileURL)
++        return;
++
++    NSString *filename = [[NSFileManager defaultManager] displayNameAtPath:mediaURL.path];
++    NSAlert *alert = [[NSAlert alloc] init];
++    [alert setAlertStyle:NSWarningAlertStyle];
++    [alert setMessageText:_NS("Move file to Trash?")];
++    [alert setInformativeText:[NSString stringWithFormat:_NS("“%@” will be moved to the Trash."), filename]];
++    [alert addButtonWithTitle:_NS("Move to Trash")];
++    [alert addButtonWithTitle:_NS("Cancel")];
++
++    if ([alert runModal] != NSAlertFirstButtonReturn)
++        return;
++
++    if (@available(macOS 10.8, *)) {
++        NSError *error = nil;
++        if ([[NSFileManager defaultManager] trashItemAtURL:mediaURL
++                                         resultingItemURL:nil
++                                                     error:&error]) {
++            [[VLCCoreInteraction sharedInstance] removeCurrentPlaylistItemAndPlayNext];
++            [self updateTrashButton];
++            return;
++        }
++
++        NSAlert *errorAlert = [NSAlert alertWithError:error];
++        [errorAlert runModal];
++        return;
++    }
++
++    NSAlert *unsupportedAlert = [[NSAlert alloc] init];
++    [unsupportedAlert setAlertStyle:NSWarningAlertStyle];
++    [unsupportedAlert setMessageText:_NS("Moving files to Trash is unavailable")];
++    [unsupportedAlert setInformativeText:_NS("This version of macOS does not support moving files to the Trash from VLC.")];
++    [unsupportedAlert addButtonWithTitle:_NS("OK")];
++    [unsupportedAlert runModal];
++}
++
++- (void)updateTrashButton
++{
++    NSURL *mediaURL = [[VLCCoreInteraction sharedInstance] URLOfCurrentPlaylistItem];
++    BOOL hasLocalFile = mediaURL.isFileURL &&
++                        [[NSFileManager defaultManager] fileExistsAtPath:mediaURL.path];
++    [_trashButton setHidden:!hasLocalFile];
++}
++
+ - (IBAction)timeSliderUpdate:(id)sender
+ {
+     switch([[NSApp currentEvent] type]) {
+@@ -258,6 +310,7 @@
+ 
+ - (void)updatePositionAndTime
+ {
++    [self updateTrashButton];
+     input_thread_t *p_input = pl_CurrentInput(getIntf());
+ 
+     /* If nothing is playing, reset times and slider */
+@@ -303,6 +356,7 @@
+ 
+ - (void)setSeekable:(BOOL)seekable
+ {
++    [self updateTrashButton];
+     // Workaround graphical issues in Mojave.
+     // TODO: This needs a proper fix
+     [_forwardButton setEnabled:NO];
+--- a/modules/gui/macosx/VLCCoreInteraction.h
++++ b/modules/gui/macosx/VLCCoreInteraction.h
+@@ -49,6 +49,7 @@
+ - (void)toggleRecord;
+ - (void)next;
+ - (void)previous;
++- (void)removeCurrentPlaylistItemAndPlayNext;
+ - (void)forward;        //LEGACY SUPPORT
+ - (void)backward;       //LEGACY SUPPORT
+ - (void)forwardExtraShort;
+--- a/modules/gui/macosx/VLCCoreInteraction.m
++++ b/modules/gui/macosx/VLCCoreInteraction.m
+@@ -37,6 +37,7 @@
+ #import <vlc_modules.h>
+ #import <vlc_charset.h>
+ #include <vlc_plugin.h>
++#import "../../../src/playlist/playlist_internal.h"
+ #import "SPMediaKeyTap.h"
+ #import "AppleRemote.h"
+ #import "VLCInputManager.h"
+@@ -261,6 +262,41 @@
+ - (void)next
+ {
+     playlist_Next(pl_Get(getIntf()));
++}
++
++- (void)removeCurrentPlaylistItemAndPlayNext
++{
++    intf_thread_t *p_intf = getIntf();
++    if (!p_intf)
++        return;
++
++    playlist_t *p_playlist = pl_Get(p_intf);
++    input_thread_t *p_input = playlist_CurrentInput(p_playlist);
++    if (!p_input)
++        return;
++
++    input_item_t *p_inputItem = input_GetItem(p_input);
++    playlist_Lock(p_playlist);
++
++    playlist_item_t *p_currentItem = playlist_ItemGetByInput(p_playlist, p_inputItem);
++    if (p_currentItem && !(p_currentItem->i_flags & PLAYLIST_RO_FLAG)) {
++        playlist_item_t *p_node = get_current_status_node(p_playlist);
++        playlist_item_t *p_nextItem = NULL;
++        if (p_node) {
++            p_nextItem = playlist_GetNextLeaf(p_playlist, p_node, p_currentItem, true, false);
++            if (!p_nextItem)
++                p_nextItem = playlist_GetNextLeaf(p_playlist, p_node, NULL, true, false);
++            if (p_nextItem == p_currentItem)
++                p_nextItem = NULL;
++        }
++
++        playlist_NodeDelete(p_playlist, p_currentItem);
++        if (p_nextItem)
++            playlist_ViewPlay(p_playlist, p_node, p_nextItem);
++    }
++
++    playlist_Unlock(p_playlist);
++    vlc_object_release(p_input);
+ }
+ 
+ - (int)durationOfCurrentPlaylistItem
+--- a/modules/gui/macosx/UI/VLCFullScreenPanel.xib
++++ b/modules/gui/macosx/UI/VLCFullScreenPanel.xib
+@@ -20,6 +20,7 @@
+                 <outlet property="previousButton" destination="TVM-DT-2yo" id="yKP-tY-0j2"/>
+                 <outlet property="remainingOrTotalTime" destination="T3x-es-c7v" id="7qI-yb-OUT"/>
+                 <outlet property="timeSlider" destination="f9T-Kg-gn6" id="Zc0-RY-bsd"/>
++                <outlet property="trashButton" destination="tR5-aS-h01" id="aK3-Ls-8dj"/>
+                 <outlet property="volumeSlider" destination="Ihl-7x-5mN" id="WGR-5h-Y9H"/>
+                 <outlet property="window" destination="a2r-mH-Iqe" id="Hd9-Q4-8sG"/>
+             </connections>
+@@ -205,6 +206,18 @@
+                                     <action selector="toggleFullscreen:" target="-2" id="rLd-CX-M6u"/>
+                                 </connections>
+                             </button>
++                            <button translatesAutoresizingMaskIntoConstraints="NO" id="tR5-aS-h01">
++                                <rect key="frame" x="365" y="10" width="64" height="22"/>
++                                <constraints>
++                                    <constraint firstAttribute="width" constant="64" id="6TN-Ul-EqV"/>
++                                </constraints>
++                                <buttonCell key="cell" type="push" title="Trash" bezelStyle="rounded" alignment="center" borderStyle="border" inset="2" id="5MZ-fm-tUz">
++                                    <font key="font" metaFont="smallSystem"/>
++                                </buttonCell>
++                                <connections>
++                                    <action selector="trashCurrentFile:" target="-2" id="zO0-Yv-Wf4"/>
++                                </connections>
++                            </button>
+                         </subviews>
+                         <constraints>
+                             <constraint firstAttribute="bottom" secondItem="C5K-aX-3aJ" secondAttribute="bottom" constant="10" id="9hx-OK-TYA"/>
+@@ -220,6 +233,8 @@
+                             <constraint firstItem="Ihl-7x-5mN" firstAttribute="leading" secondItem="iYd-wn-Bnl" secondAttribute="trailing" constant="5" id="sbi-nB-Ucp"/>
+                             <constraint firstItem="dA8-RM-Mgd" firstAttribute="centerX" secondItem="VLH-qy-cwr" secondAttribute="centerX" id="wG3-Bx-EMo"/>
+                             <constraint firstItem="C5K-aX-3aJ" firstAttribute="top" secondItem="VLH-qy-cwr" secondAttribute="top" constant="10" id="yLu-H1-w7g"/>
++                            <constraint firstItem="tR5-aS-h01" firstAttribute="centerY" secondItem="C5K-aX-3aJ" secondAttribute="centerY" id="puB-NN-4oN"/>
++                            <constraint firstItem="C5K-aX-3aJ" firstAttribute="leading" secondItem="tR5-aS-h01" secondAttribute="trailing" constant="12" id="CaN-wL-ubG"/>
+                         </constraints>
+                     </customView>
+                 </subviews>
