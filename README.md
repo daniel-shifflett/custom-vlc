@@ -12,8 +12,8 @@ After an explicit confirmation:
 
 1. macOS moves that file to the Trash using `NSFileManager`.
 2. VLC removes that exact item from its playlist.
-3. VLC begins the following playable item (and follows VLC's normal wrap-around
-   behavior when the deleted item was last).
+3. VLC begins the next enabled item in playlist order, wrapping to the first
+   enabled item when the deleted item was last.
 
 If the move to Trash fails, VLC shows the macOS error and leaves playback and
 the playlist unchanged. It never deletes network streams or files that are not

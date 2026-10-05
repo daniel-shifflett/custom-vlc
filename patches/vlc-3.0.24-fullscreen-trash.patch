@@ -119,15 +119,51 @@
  - (void)forwardExtraShort;
 --- a/modules/gui/macosx/VLCCoreInteraction.m
 +++ b/modules/gui/macosx/VLCCoreInteraction.m
-@@ -37,6 +37,7 @@
- #import <vlc_modules.h>
- #import <vlc_charset.h>
- #include <vlc_plugin.h>
-+#import "../../../src/playlist/playlist_internal.h"
- #import "SPMediaKeyTap.h"
- #import "AppleRemote.h"
- #import "VLCInputManager.h"
-@@ -261,6 +262,41 @@
+@@ -44,6 +44,43 @@
+ 
+ #import "NSSound+VLCAdditions.h"
+ 
++static bool FindNextPlayableLeaf(playlist_item_t *p_item,
++                                 playlist_item_t *p_afterItem,
++                                 bool *p_foundAfterItem,
++                                 playlist_item_t **p_nextItem)
++{
++    if (p_item->i_children >= 0) {
++        for (int i = 0; i < p_item->i_children; i++) {
++            if (FindNextPlayableLeaf(p_item->pp_children[i], p_afterItem,
++                                     p_foundAfterItem, p_nextItem))
++                return true;
++        }
++        return false;
++    }
++
++    if (*p_foundAfterItem && !(p_item->i_flags & PLAYLIST_DBL_FLAG)) {
++        *p_nextItem = p_item;
++        return true;
++    }
++
++    if (p_item == p_afterItem)
++        *p_foundAfterItem = true;
++
++    return false;
++}
++
++static playlist_item_t *NextPlayableLeaf(playlist_item_t *p_node,
++                                         playlist_item_t *p_afterItem)
++{
++    if (!p_node)
++        return NULL;
++
++    bool foundAfterItem = p_afterItem == NULL;
++    playlist_item_t *p_nextItem = NULL;
++    FindNextPlayableLeaf(p_node, p_afterItem, &foundAfterItem, &p_nextItem);
++    return p_nextItem;
++}
++
+ static int BossCallback(vlc_object_t *p_this, const char *psz_var,
+                         vlc_value_t oldval, vlc_value_t new_val, void *param)
+ {
+@@ -261,6 +298,41 @@
  - (void)next
  {
      playlist_Next(pl_Get(getIntf()));
@@ -149,15 +185,15 @@
 +
 +    playlist_item_t *p_currentItem = playlist_ItemGetByInput(p_playlist, p_inputItem);
 +    if (p_currentItem && !(p_currentItem->i_flags & PLAYLIST_RO_FLAG)) {
-+        playlist_item_t *p_node = get_current_status_node(p_playlist);
-+        playlist_item_t *p_nextItem = NULL;
-+        if (p_node) {
-+            p_nextItem = playlist_GetNextLeaf(p_playlist, p_node, p_currentItem, true, false);
-+            if (!p_nextItem)
-+                p_nextItem = playlist_GetNextLeaf(p_playlist, p_node, NULL, true, false);
-+            if (p_nextItem == p_currentItem)
-+                p_nextItem = NULL;
-+        }
++        playlist_item_t *p_node = p_currentItem->p_parent;
++        while (p_node && p_node->p_parent && p_node->p_parent->p_parent)
++            p_node = p_node->p_parent;
++
++        playlist_item_t *p_nextItem = NextPlayableLeaf(p_node, p_currentItem);
++        if (!p_nextItem)
++            p_nextItem = NextPlayableLeaf(p_node, NULL);
++        if (p_nextItem == p_currentItem)
++            p_nextItem = NULL;
 +
 +        playlist_NodeDelete(p_playlist, p_currentItem);
 +        if (p_nextItem)
