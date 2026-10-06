@@ -21,16 +21,18 @@ the current local media item.
 
 ## Fullscreen file size
 
-`patches/vlc-3.0.24-fullscreen-file-size.patch` appends the current local
-file's human-readable size to the fullscreen title, for example:
+`patches/vlc-3.0.24-fullscreen-file-size.patch` shows the current local
+file's human-readable size in a fixed-width label after the fullscreen title,
+for example:
 
 ```
-My Film.mkv (1.4 GB)
+My Film.mkv   1.4 GB
 ```
 
-It reuses VLC's compatibility-aware byte formatter, respects the system
-locale, and leaves stream titles unchanged. The patch requires the fullscreen
-Trash patch above, so use the helper script to apply both in order.
+The title can truncate without hiding the size. The patch reuses VLC's
+compatibility-aware byte formatter, respects the system locale, and leaves
+stream titles unchanged. It requires the fullscreen Trash patch above, so use
+the helper script to apply both in order.
 
 ## Apply the patch
 

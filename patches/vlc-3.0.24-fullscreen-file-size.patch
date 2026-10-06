@@ -1,3 +1,13 @@
+--- a/modules/gui/macosx/VLCFSPanelController.h
++++ b/modules/gui/macosx/VLCFSPanelController.h
+@@ -43,6 +43,7 @@
+ @property IBOutlet NSButton     *fullscreenButton;
+ @property IBOutlet NSButton     *trashButton;
+ @property IBOutlet NSTextField  *mediaTitle;
++@property IBOutlet NSTextField  *fileSize;
+ @property IBOutlet VLCTimeField *elapsedTime;
+ @property IBOutlet VLCTimeField *remainingOrTotalTime;
+ @property IBOutlet NSSlider     *timeSlider;
 --- a/modules/gui/macosx/VLCFSPanelController.m
 +++ b/modules/gui/macosx/VLCFSPanelController.m
 @@ -27,6 +27,7 @@
@@ -8,12 +18,20 @@
  #import "VLCMain.h"
  
  @interface VLCFSPanelController () {
-@@ -305,7 +306,20 @@
+@@ -91,6 +92,7 @@
+             NSFont *textFont = [NSFont systemFontOfSize:16.];
  
+             self.mediaTitle.font = textFont;
++            self.fileSize.font = textFont;
+             self.elapsedTime.font = textFont;
+             self.remainingOrTotalTime.font = textFont;
+ 
+@@ -306,6 +308,19 @@
  - (void)setStreamTitle:(NSString *)title
  {
--    [_mediaTitle setStringValue:title];
-+    NSString *displayTitle = title;
+     [_mediaTitle setStringValue:title];
++    [_fileSize setStringValue:@""];
++
 +    NSURL *mediaURL = [[VLCCoreInteraction sharedInstance] URLOfCurrentPlaylistItem];
 +    if (mediaURL.isFileURL) {
 +        NSDictionary *attributes = [[NSFileManager defaultManager] attributesOfItemAtPath:mediaURL.path
@@ -22,11 +40,60 @@
 +        if (fileSize) {
 +            NSString *formattedFileSize = [VLCByteCountFormatter stringFromByteCount:fileSize.longLongValue
 +                                                                            countStyle:NSByteCountFormatterCountStyleFile];
-+            displayTitle = [NSString stringWithFormat:@"%@ (%@)", title, formattedFileSize];
++            [_fileSize setStringValue:formattedFileSize];
 +        }
 +    }
-+
-+    [_mediaTitle setStringValue:displayTitle];
  }
  
  - (void)updatePositionAndTime
+--- a/modules/gui/macosx/UI/VLCFullScreenPanel.xib
++++ b/modules/gui/macosx/UI/VLCFullScreenPanel.xib
+@@ -11,6 +11,7 @@
+                 <outlet property="backwardButton" destination="7QH-jb-QdM" id="VnK-HH-sNu"/>
+                 <outlet property="controlsView" destination="Npt-C5-K77" id="Dnt-ku-O6u"/>
+                 <outlet property="elapsedTime" destination="nJc-M4-sMF" id="DFf-yw-e6A"/>
++                <outlet property="fileSize" destination="Fsz-1b-yTe" id="Fsz-4f-zBr"/>
+                 <outlet property="forwardButton" destination="jSN-hV-r5D" id="3PN-jP-xPY"/>
+                 <outlet property="fullscreenButton" destination="C5K-aX-3aJ" id="AGc-uy-2b0"/>
+                 <outlet property="heightMaxConstraint" destination="Vwe-uz-fKC" id="yz0-Rh-MKt"/>
+@@ -61,13 +62,24 @@
+                         </textFieldCell>
+                     </textField>
+                     <textField verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" translatesAutoresizingMaskIntoConstraints="NO" id="Vd8-0f-Usz">
+-                        <rect key="frame" x="98" y="61" width="287" height="14"/>
++                        <rect key="frame" x="98" y="61" width="207" height="14"/>
+                         <textFieldCell key="cell" controlSize="small" lineBreakMode="truncatingTail" allowsUndo="NO" sendsActionOnEndEditing="YES" alignment="center" placeholderString="Nothing Playing" usesSingleLineMode="YES" id="uA0-hc-yIU">
+                             <font key="font" metaFont="smallSystem"/>
+                             <color key="textColor" red="1" green="1" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                             <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
+                         </textFieldCell>
+                     </textField>
++                    <textField horizontalHuggingPriority="750" horizontalCompressionResistancePriority="1000" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Fsz-1b-yTe">
++                        <rect key="frame" x="310" y="61" width="75" height="14"/>
++                        <constraints>
++                            <constraint firstAttribute="width" constant="75" id="Fsz-6c-nQd"/>
++                        </constraints>
++                        <textFieldCell key="cell" controlSize="small" scrollable="YES" lineBreakMode="clipping" allowsUndo="NO" sendsActionOnEndEditing="YES" alignment="right" usesSingleLineMode="YES" id="Fsz-7d-oRe">
++                            <font key="font" metaFont="smallSystem"/>
++                            <color key="textColor" red="1" green="1" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
++                            <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
++                        </textFieldCell>
++                    </textField>
+                     <slider verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="f9T-Kg-gn6">
+                         <rect key="frame" x="20" y="43" width="443" height="17"/>
+                         <constraints>
+@@ -239,12 +251,13 @@
+                     </customView>
+                 </subviews>
+                 <constraints>
+-                    <constraint firstItem="T3x-es-c7v" firstAttribute="left" secondItem="Vd8-0f-Usz" secondAttribute="right" constant="5" id="1vL-HQ-doh"/>
++                    <constraint firstItem="Fsz-1b-yTe" firstAttribute="left" secondItem="Vd8-0f-Usz" secondAttribute="right" constant="5" id="Fsz-8e-pSf"/>
+                     <constraint firstItem="VLH-qy-cwr" firstAttribute="leading" secondItem="Npt-C5-K77" secondAttribute="leading" id="AXK-9N-Zst"/>
+                     <constraint firstItem="f9T-Kg-gn6" firstAttribute="leading" secondItem="Npt-C5-K77" secondAttribute="leading" constant="20" id="Ibl-1I-f2u"/>
+                     <constraint firstItem="f9T-Kg-gn6" firstAttribute="top" secondItem="nJc-M4-sMF" secondAttribute="bottom" constant="2" id="Pix-DL-2C0"/>
+                     <constraint firstItem="nJc-M4-sMF" firstAttribute="bottom" secondItem="Vd8-0f-Usz" secondAttribute="bottom" id="Rd7-TG-oek"/>
+                     <constraint firstItem="Vd8-0f-Usz" firstAttribute="left" secondItem="nJc-M4-sMF" secondAttribute="right" constant="5" id="SvX-6Y-TRg"/>
++                    <constraint firstItem="T3x-es-c7v" firstAttribute="left" secondItem="Fsz-1b-yTe" secondAttribute="right" constant="5" id="Fsz-9f-qTg"/>
+                     <constraint firstAttribute="trailing" secondItem="f9T-Kg-gn6" secondAttribute="trailing" constant="20" id="TIT-A8-rRx"/>
+                     <constraint firstItem="VLH-qy-cwr" firstAttribute="top" secondItem="f9T-Kg-gn6" secondAttribute="bottom" constant="2" id="ZlH-9e-2nv"/>
+                     <constraint firstItem="Vd8-0f-Usz" firstAttribute="bottom" secondItem="T3x-es-c7v" secondAttribute="bottom" id="kpz-BE-D6F"/>
